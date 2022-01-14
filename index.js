@@ -1,8 +1,14 @@
 const db = require("./db");
 const inquirer = require("inquirer");
-const { viewAllEmployees, addDepartment } = require("./db");
-const connection = require("./db/connection");
+// const { viewAllEmployees, addDepartment } = require("./db");
 require("console.table");
+const VIEW_ALL_EMPLOYEES = "View all Employees";
+const ADD_EMPLOYEE = "Add Employee";
+const UPDATE_EMPLOYEE_ROLE = "Update Employee Role";
+const VIEW_ALL_ROLES = "View All Roles";
+const ADD_ROLE = "Add Role";
+const VIEW_ALL_DEPARTMENTS = "View All Departments";
+const ADD_DEPARTMENT = "Add Department";
 
 // to view info use SELECT * FROM (tables name)
 async function init() {
@@ -12,37 +18,47 @@ async function init() {
       name: "initQuestion",
       message: "What would you like to do?",
       choices: [
-        "View all Employees",
-        "Add Employee",
-        "Update Employee Role",
-        "View All Roles",
-        "Add Role",
-        "View All Departments",
-        "Add Department",
+        VIEW_ALL_EMPLOYEES,
+        ADD_EMPLOYEE,
+        UPDATE_EMPLOYEE_ROLE,
+        VIEW_ALL_ROLES,
+        ADD_ROLE,
+        VIEW_ALL_DEPARTMENTS,
+        ADD_DEPARTMENT,
       ],
     },
   ]);
   switch (initQuestion) {
-    case "View all Employees":
-      getAllEmployees();
+    case VIEW_ALL_EMPLOYEES:
+      await getAllEmployees();
+      init();
       break;
-    case "View all Roles":
-      getAllRoles();
+    case VIEW_ALL_ROLES:
+      console.log("hitting the case");
+      await getAllRoles();
+      init();
       break;
-    case "View all Departments":
-      getAllDepartments();
+    case VIEW_ALL_DEPARTMENTS:
+      await getAllDepartments();
+      init();
       break;
-    case "Add Employee":
-      addEmployee();
+    case ADD_EMPLOYEE:
+      await addEmployee();
+      init();
       break;
-    case "Add Role":
-      addRole();
+    case ADD_ROLE:
+      await addRole();
+      init();
       break;
-    case "addDepartment":
-      addDepartment();
+    case ADD_DEPARTMENT:
+      await addDept();
+      init();
+      break;
+    case UPDATE_EMPLOYEE_ROLE:
+      await editEmployeeRole();
+      init();
       break;
   }
-  init();
 }
 
 async function getAllEmployees() {
@@ -51,6 +67,7 @@ async function getAllEmployees() {
 }
 
 async function getAllRoles() {
+  console.log("Getting Roles");
   const data = await db.viewAllRoles();
   console.table(data);
 }
@@ -60,20 +77,20 @@ async function getAllDepartments() {
   console.table(data);
 }
 
-async function editEmployee() {
-  const employees = await db.viewAllEmployees();
-  const roles = await db.viewAllRoles();
+async function editEmployeeRole() {
+  const employees = await db.getEmployees();
+  const roles = await db.getRoles();
   const employeeChoices = await employees.map((employee) => {
     return {
       name: employee.first_name + " " + employee.last_name,
       value: employee.id,
     };
   });
-  const roles = await roles.map(({ role_name, id }) => ({
+  const rolesChoices = await roles.map(({ role_name, id }) => ({
     name: role_name,
     value: id,
   }));
-  const { userChoice } = inquirer.prompt([
+  const { userChoice } = await inquirer.prompt([
     {
       type: "list",
       name: "userChoice",
@@ -81,34 +98,38 @@ async function editEmployee() {
       choices: employeeChoices,
     },
   ]);
-  const userChoiceName = employeeChoices.filter(
-    ({ value }) => value !== userChoice
+  const userChoiceName = await employeeChoices.filter(
+    ({ value }) => value === userChoice
   );
-  console.log(userChoiceName);
-  const { userChoiceRole } = inquirer.prompt([
+  const { userChoiceRole } = await inquirer.prompt([
     {
       type: "list",
       name: "userChoiceRole",
       message: `Which Role would you like to give ${userChoiceName.name}?`,
-      choices: employeesChoices,
+      choices: rolesChoices,
     },
   ]);
-  employee.role_id = userChoiceRole;
+  db.updateEmployeeRole(userChoiceRole, userChoice);
 }
 
-async function addDepartment() {
-  const { userChoice } = inquirer.prompt([
+async function addDept() {
+  const { dept } = await inquirer.prompt([
     {
       type: "input",
-      name: "userChoice",
+      name: "dept",
       message: "What is the name of the department?",
     },
   ]);
-  await db.addDepartment(userChoice);
+  await db.addDepartment(dept);
 }
 
 async function addRole() {
-  const { userChoice } = inquirer.prompt([
+  const departments = await db.getDepartments();
+  const deptChoices = await departments.map(({ id, department_name }) => ({
+    name: department_name,
+    value: id,
+  }));
+  const { name, salary, dept } = await inquirer.prompt([
     {
       type: "input",
       name: "name",
@@ -117,16 +138,32 @@ async function addRole() {
     {
       type: "input",
       name: "salary",
-      message: "What is the name of the role?",
+      message: "What is the Salary of the role?",
+    },
+    {
+      type: "list",
+      name: "dept",
+      message: "What is the Employee's role?",
+      choices: deptChoices,
     },
   ]);
-  await db.addRole(userChoice.name, userChoice.salary);
+  await db.addRole(name, salary, dept);
 }
 
 async function addEmployee() {
-  const departments = await db.viewAllDepartments();
-  const filteredRoles = departments.filter(({ id }) => id !== userChoice);
-  const { userChoice } = inquirer.prompt([
+  const roles = await db.getRoles();
+  const rolesChoices = await roles.map(({ role_name, id }) => ({
+    name: role_name,
+    value: id,
+  }));
+  const employees = await db.getEmployees();
+  const employeeChoices = await employees.map((employee) => {
+    return {
+      name: employee.first_name + " " + employee.last_name,
+      value: employee.id,
+    };
+  });
+  const { firstName, lastName, role, manager } = await inquirer.prompt([
     {
       type: "input",
       name: "firstName",
@@ -139,21 +176,18 @@ async function addEmployee() {
     },
     {
       type: "list",
-      name: "department",
-      message: "What is the Employee's department?",
-      choices: [departments],
+      name: "role",
+      message: "What is the Employee's role?",
+      choices: rolesChoices,
     },
     {
       type: "list",
-      name: "role",
-      message: "What is the Employee's role?",
-      choices: [filteredRoles],
+      name: "manager",
+      message: "Who is the Employee's Manager?",
+      choices: employeeChoices,
     },
   ]);
-  db.addEmployee(
-    userChoice.firstName,
-    userChoice.lastName,
-    userChoice.department,
-    userChoice.role
-  );
+  db.addEmployee(firstName, lastName, role, manager);
 }
+
+init();
